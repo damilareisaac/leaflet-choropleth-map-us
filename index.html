@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Leaflet Choropleth Map U.S. Pop Density</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	
+    <!-- include default leaflet styles -->
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.css" />
+
+	<style>
+
+    .map-canvas {
+      border: 2px dotted green;	
+      height: 700px;	
+      width: 1000px;
+
+    }
+
+    .info {
+      padding: 6px 8px;
+      font: 14px/16px Arial, Helvetica, sans-serif; /* ? */
+      background: white;
+      background: rgba(255,255,255,0.8);
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      border-radius: 5px;
+    }
+
+    .info h4 {
+      margin: 0 0 5px 0;
+      color: #777; 
+    }
+
+    .info__message {
+      font-size: smaller;
+      font-style: italic;
+      padding-left: 30px;
+    }
+
+    .legend {
+      color: #555;
+      line-height: 18px;
+      
+    }
+    .legend i {
+      float: left;
+      height: 18px;
+      margin-right: 8px;
+      opacity: 0.7;      
+      width: 18px;
+    }
+
+	</style>
+</head>
+<body>
+
+   <div class="map-canvas" id="choropleth-map"></div>
+
+   <!-- include leaflet js from cdn -->
+   <script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+
+   <!-- include the us satates data 
+        && provides the var statesData = json {} -->
+   <script src="http://leafletjs.com/examples/us-states.js"></script>
+
+   <script>
+     (function(){
+
+        //'use strict';
+
+       var map = L.map('choropleth-map').setView([37.8, -96], 4), // continental U.S.
+           mapboxAccessToken = 'pk.eyJ1IjoibW0zIiwiYSI6InI5OGJ0NU0ifQ.0nE3dCbDkeY1Cko21RKKVA',
+           tileURL = 'https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token=' + mapboxAccessToken,
+           attributionHTML = 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="http://mapbox.com">Mapbox</a>, map &copy; company B',
+           geojson; // define geojson var for use later to get your data and run functions against it
+
+       // add some tiles to make this a slippy map 
+       L.tileLayer(tileURL, {
+         id: 'mapbox.light', // wtf? - search docs for the list of pre-baked Ids to a tileLayer
+         attribution: attributionHTML,
+       }).addTo(map);
+
+       // getColor utility function that returns diff. colors based on the density values (8 classes)
+       function getColor(d){
+         return d > 1000 ? '#800026' :
+                d > 500  ? '#BD0026' :
+                d > 200  ? '#E31A1C' :
+                d > 100  ? '#FC4E2A' : // #FC4E2A
+                d > 50   ? '#FD8D3C' :
+                d > 20   ? '#FEB24C' :
+                d > 10   ? '#FED976' :
+                           '#FFEDA0' ; 
+       }
+
+       function choroStyle1(feature){
+         return {
+           // dynamic fill color to be choropleth
+           fillColor: getColor(feature.properties.density),
+           // all the rest are static style props in this case 
+           weight: 2,
+           opacity: 1,
+           color:'white',
+           dashArray: '3', // wtf is this - svg style prop i dont know yet
+           fillOpacity: 0.7
+         };
+       }
+
+     // add map interaction event handler functions  
+     function highlightFeature(e) { // e reps a map layer, a state defined by a <path>
+       // define your layer
+       var layer = e.target;
+
+       // style your layer
+       layer.setStyle({
+           weight: 5,
+           color: '#666',
+           dashArray: '',
+           fillOpacity: 0.7
+        });
+
+       // dynamically update the info control with data
+       info.update(layer.feature.properties);
+
+
+       // show layer closer to user (z-index?) (not for ie or opera)
+       if(!L.Browser.ie && !L.Browser.opera) {
+         layer.bringToFront();
+       }
+     }
+
+    function resetHighlight(e) {
+      geojson.resetStyle(e.target);
+      // clear the Info Control
+      info.update(); 
+    }
+
+    function zoomToFeature(e){
+        map.fitBounds(e.target.getBounds());
+      //alert(  JSON.stringify(e.target.getBounds())  );
+    }
+
+
+    function onEachStateFeature(feature, layer){
+      layer.on({
+         click: zoomToFeature,
+         mouseover: highlightFeature,
+         mouseout: resetHighlight
+         //, hover: showInfocontrol 
+      });
+
+    }
+
+    // add Custom Info Control to the map
+    var info = L.control();
+    
+    // set up some Control methods
+    info.onAdd = function (map) {
+        this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+        this.update();
+        return this._div;
+    }; 
+
+    info.update = function (props) {
+        this._div.innerHTML = '<h4>U.S. Population Density</h4>' +  
+        (props ? '<b>' + props.name + '</b><br />' + props.density + ' people / mi<sup>2</sup>'
+        : '<span class="info__message">Hover over a state</span>'); // if props, do dynamic data, otherwise have do a hover msg - if else is much more readable / scannable code
+    };
+
+    info.addTo(map);
+
+      // add the GeoJSON to your map (now with the associated options object with styles, onEachFeature event listener attachment)
+      //, {style: choroStyle1}
+      geojson = L.geoJson(statesData, {
+          style: choroStyle1, 
+          onEachFeature: onEachStateFeature
+      }).addTo(map);
+
+     // Add the Legend to your Map
+     var legend = L.control({position: 'bottomright'});
+
+     legend.onAdd = function(map){
+     
+        var legendDiv = L.DomUtil.create('div', 'info legend'),
+            grades = [0, 10, 20, 50, 100, 200, 500, 1000], // 8 classes in the legend : might be too many 
+            labels = [];
+
+         // title the legend
+         legendDiv.innerHTML = '<h4> Population / mi<sup>2</sup></h4>';
+
+        // loop through our density intervals and generate a label with a colored square for each interval
+        for (var i = 0; i < grades.length; i++) {
+          legendDiv.innerHTML +=
+              '<i style="background:' + getColor(grades[i] + 1) + '"></i> ' +
+               grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+    }
+        return legendDiv;
+     };
+
+     legend.addTo(map);
+     
+  })();	
+   </script>
+</body>
+</html>
